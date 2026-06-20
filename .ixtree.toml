@@ -1,0 +1,18 @@
+[ignore]
+patterns = [
+    "node_modules",
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    "target",
+    "dist",
+    "build",
+    ".DS_Store",
+    "Thumbs.db",
+    ".git",
+
+    # ユーザー追加
+    "log",
+    "tmp",
+]

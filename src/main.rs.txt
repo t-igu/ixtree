@@ -1,0 +1,317 @@
+// use regex::Regex;
+use serde::Serialize;
+use std::env;
+use std::fs;
+use std::path::Path;
+use std::time::SystemTime;
+
+#[derive(Serialize)]
+struct Node {
+    name: String,
+    path: String,
+    file_type: String,
+    size: u64,
+    modified: String,
+    ext: String,
+    readonly: bool,
+    hidden: bool,
+    children: Vec<Node>,
+}
+
+fn load_ignore_from_toml(root: &Path) -> Vec<String> {
+    let config_path = root.join(".ixtree.toml");
+    if !config_path.exists() {
+        return Vec::new();
+    }
+
+    let text = std::fs::read_to_string(config_path).unwrap();
+    let value: toml::Value = toml::from_str(&text).unwrap();
+
+    let mut patterns = Vec::new();
+
+    if let Some(arr) = value
+        .get("ignore")
+        .and_then(|i| i.get("patterns"))
+        .and_then(|p| p.as_array())
+    {
+        for p in arr {
+            if let Some(s) = p.as_str() {
+                patterns.push(s.to_string());
+            }
+        }
+    }
+
+    patterns
+}
+
+fn should_exclude(full_path: &str, patterns: &Vec<String>) -> bool {
+    // パスを OS 非依存にするため、両方の区切りを扱う
+    let normalized = full_path.replace("\\", "/");
+
+    for pat in patterns {
+        // パターンも normalize
+        let p = pat.replace("\\", "/");
+
+        // 1. 完全一致（rare）
+        if normalized == p {
+            return true;
+        }
+
+        // 2. ディレクトリ名一致（/target/）
+        if normalized.contains(&format!("/{}/", p)) {
+            return true;
+        }
+
+        // 3. 末尾が /target
+        if normalized.ends_with(&format!("/{}", p)) {
+            return true;
+        }
+
+        // 4. 先頭が target/
+        if normalized.starts_with(&format!("{}/", p)) {
+            return true;
+        }
+
+        // 5. 部分一致（最終 fallback）
+        //    例: "Temp/ixtree-xxxx" を "ixtree" で除外
+        if normalized.contains(&p) {
+            return true;
+        }
+    }
+
+    false
+}
+
+#[allow(deprecated)]
+fn get_modified(metadata: &fs::Metadata) -> String {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| {
+            let ts = chrono::NaiveDateTime::from_timestamp_opt(d.as_secs() as i64, 0).unwrap();
+            ts.format("%Y-%m-%dT%H:%M:%S").to_string()
+        })
+        .unwrap_or_default()
+}
+
+fn walk(
+        path: &Path,
+        ignore_patterns: &Vec<String>,
+        dirsfirst: bool,
+    ) -> Option<Node> {
+    let name = path.file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string_lossy().to_string());
+
+    let full_path = path.to_string_lossy().to_string();
+
+    if should_exclude(&full_path, ignore_patterns) {
+        return None;
+    }
+
+    let metadata = fs::metadata(path).ok()?;
+    let file_type = if metadata.is_dir() { "dir" } else { "file" }.to_string();
+    let size = if metadata.is_file() { metadata.len() } else { 0 };
+    let modified = get_modified(&metadata);
+
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let readonly = metadata.permissions().readonly();
+
+    #[cfg(windows)]
+    let hidden = {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x2 != 0
+    };
+
+    #[cfg(not(windows))]
+    let hidden = false;
+
+    let mut children = Vec::new();
+
+    if metadata.is_dir() {
+        let mut entries: Vec<_> = fs::read_dir(path)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .collect();
+
+        if dirsfirst {
+            entries.sort_by(|a, b| {
+                let pa = a.path();
+                let pb = b.path();
+
+                let ma = pa.is_dir();
+                let mb = pb.is_dir();
+
+                match (ma, mb) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => pa.cmp(&pb),
+                }
+            });
+        } else {
+            entries.sort_by_key(|e| e.path());
+        }
+
+        // entries.sort_by_key(|e| e.path());
+
+        for entry in entries {
+            if let Some(child) = walk(&entry.path(), ignore_patterns, dirsfirst) {
+                children.push(child);
+            }
+        }
+    }
+
+    Some(Node {
+        name,
+        path: path.to_string_lossy().to_string(),
+        file_type,
+        size,
+        modified,
+        ext,
+        readonly,
+        hidden,
+        children,
+    })
+}
+//
+// TEXT OUTPUT
+//
+fn print_text(node: &Node, prefix: &str, is_last: bool, show_prop: bool) {
+    let connector = if is_last { "└── " } else { "├── " };
+
+    if show_prop {
+        println!(
+            "{}{}{} <{}, ext={}, size={}, modified={}, readonly={}, hidden={}>",
+            prefix,
+            connector,
+            node.name,
+            node.ext,
+            node.file_type,
+            node.size,
+            node.modified,
+            node.readonly,
+            node.hidden
+        );
+    } else {
+        println!("{}{}{}", prefix, connector, node.name);
+    }
+
+    let new_prefix = if is_last {
+        format!("{}    ", prefix)
+    } else {
+        format!("{}│   ", prefix)
+    };
+
+    let last_index = node.children.len().saturating_sub(1);
+
+    for (i, child) in node.children.iter().enumerate() {
+        print_text(child, &new_prefix, i == last_index, show_prop);
+    }
+}
+
+//
+// CSV OUTPUT
+//
+fn print_csv(node: &Node) {
+    println!(
+        "{},{},{},{},{},{},{},{},{}",
+        node.path,
+        node.name,
+        node.file_type,
+        node.size,
+        node.modified,
+        node.ext,
+        node.readonly,
+        node.hidden,
+        node.children.len()
+    );
+
+    for child in &node.children {
+        print_csv(child);
+    }
+}
+
+#[warn(unused_variables)]
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let mut path = ".";
+    let mut exclude_pattern: Vec<String> = Vec::new();
+    let mut show_prop = false;
+    let mut format = "text";
+    let mut dirsfirst = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dirsfirst" => {
+                dirsfirst = true;
+                i += 1;
+            }
+
+            "-p" | "--property" => {
+                show_prop = true;
+                i += 1;
+            }
+            "-I" | "--ignore" => {
+                exclude_pattern.push(args[i + 1].clone());
+                i += 2;
+            }
+            "--format" => {
+                format = &args[i + 1];
+                i += 2;
+            }
+            p => {
+                path = p;
+                i += 1;
+            }
+        }
+    }
+
+    let root_path = Path::new(path);
+
+    // 1. TOML の ignore を読み込む
+    let mut ignore_patterns = load_ignore_from_toml(root_path);
+
+    // 2. 引数の場外条件をパターンに追加する
+    ignore_patterns.extend(exclude_pattern);
+
+    let root = walk(
+        root_path,
+        &ignore_patterns,
+        dirsfirst
+    ).unwrap();
+    
+    let abs = root_path.canonicalize().unwrap();
+
+    match format {
+        "text" => {
+            let last_index = root.children.len().saturating_sub(1);
+            let mut s = abs.to_string_lossy().to_string();
+            // Windows の \\?\ プレフィックスを除去
+            if s.starts_with(r"\\?\") {
+                s = s[4..].to_string();
+            }
+            println!("{}", s);            
+            for (i, child) in root.children.iter().enumerate() {
+                print_text(child, "", i == last_index, show_prop);
+            }
+        }
+        "csv" => {
+            println!("path,name,type,size,modified,ext,readonly,hidden,child_count");
+            for child in &root.children {
+                print_csv(child);
+            }
+        }
+        "json" => {
+            let s = serde_json::to_string_pretty(&root.children).unwrap();
+            println!("{}", s);
+        }
+        _ => {}
+    }
+}

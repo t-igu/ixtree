@@ -1,0 +1,12 @@
+[package]
+name = "ixtree"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+toml = "0.8"
+regex = "1"
+walkdir = "2"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0"
