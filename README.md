@@ -13,6 +13,7 @@ or via command-line options.
 - **Additional ignore patterns** via `-I`
 - **Directory-first sorting** (`--dirsfirst`)
 - **Property display** (`-p`)
+- **Output format selection** (`--format text|json`)
 - **Safe & predictable behavior**  
   - No parent-directory config search  
   - Only the explicitly provided config file or the current directory is used
@@ -39,7 +40,19 @@ target/release/ixtree
 ixtree [PATH] [OPTIONS]
 ```
 
-### Examples
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-p`, `--property` | Show file properties |
+| `-I <pattern>`, `--ignore <pattern>` | Add ignore pattern |
+| `--dirsfirst` | Show directories before files |
+| `--format <text|json>` | Output format (default: `text`) |
+| `--config <path>` | Use a specific config file |
+
+---
+
+## 🧭 Examples
 
 ```bash
 # Show current directory
@@ -53,6 +66,9 @@ ixtree -p .
 
 # Add ignore patterns
 ixtree -I target -I "*.log" .
+
+# JSON output
+ixtree --format json .
 
 # Use explicit config file
 ixtree --config ./config/ixtree.toml .
@@ -84,8 +100,21 @@ ixtree --config ./myconfig.toml .
 
 ## 🧪 Example Output
 
+### Windows
+
 ```
-C:/workspace/myproject/
+C:\workspace\myproject
+├── src
+│   ├── main.rs
+│   └── walker.rs
+├── Cargo.toml
+└── README.md
+```
+
+### Linux / macOS
+
+```
+/home/user/myproject
 ├── src
 │   ├── main.rs
 │   └── walker.rs
@@ -98,6 +127,3 @@ C:/workspace/myproject/
 ## 📄 License
 
 MIT
-
-
-
