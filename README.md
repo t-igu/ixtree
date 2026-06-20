@@ -47,7 +47,7 @@ ixtree [PATH] [OPTIONS]
 | `-p`, `--property` | Show file properties |
 | `-I <pattern>`, `--ignore <pattern>` | Add ignore pattern |
 | `--dirsfirst` | Show directories before files |
-| `--format <text|json>` | Output format (default: `text`) |
+| `--format <text /json / csv>` | Output format (default: `text`) |
 | `--config <path>` | Use a specific config file |
 
 ---
