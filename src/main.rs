@@ -248,66 +248,48 @@ fn print_csv(node: &Node) {
     }
 }
 
+fn print_help() {
+    println!("ixtree - directory tree viewer");
+    println!();
+    println!("Usage:");
+    println!("  ixtree [PATH] [OPTIONS]");
+    println!();
+    println!("Options:");
+    println!("  -p, --property          Show file properties");
+    println!("  -I, --ignore PATTERN    Add ignore pattern");
+    println!("      --dirsfirst         Show directories first");
+    println!("      --format text|csv|json");
+    println!("      --config FILE       Specify config file");
+    println!("  -h, --help              Show this help");
+    println!("  -v, --version           Show version");
+}
+
+fn print_version() {
+    println!("ixtree {}", env!("CARGO_PKG_VERSION"));
+}
+
 #[warn(unused_variables)]
-// fn main() {
-
-    
-//     let args: Vec<String> = env::args().collect();
-
-//     let mut path = ".";
-//     let mut exclude_pattern: Vec<String> = Vec::new();
-//     let mut show_prop = false;
-//     let mut format = "text";
-//     let mut dirsfirst = false;
-
-//     let mut i = 1;
-//     while i < args.len() {
-//         match args[i].as_str() {
-//             "--dirsfirst" => {
-//                 dirsfirst = true;
-//                 i += 1;
-//             }
-
-//             "-p" | "--property" => {
-//                 show_prop = true;
-//                 i += 1;
-//             }
-//             "-I" | "--ignore" => {
-//                 exclude_pattern.push(args[i + 1].clone());
-//                 i += 2;
-//             }
-//             "--format" => {
-//                 format = &args[i + 1];
-//                 i += 2;
-//             }
-//             p => {
-//                 path = p;
-//                 i += 1;
-//             }
-//         }
-//     }
-
-//     let root_path = std::env::current_dir().unwrap();
-
-//     // ★ ここで path を使う
-//     let target_path = PathBuf::from(path);
-
-//     // 1. TOML の ignore を読み込む
-//     let mut ignore_patterns = load_ignore_from_toml(&root_path);
-
-//     // 2. 引数の場外条件をパターンに追加する
-//     ignore_patterns.extend(exclude_pattern);
-
-//     let root = walk(
-//         &target_path,
-//         &ignore_patterns,
-//         dirsfirst
-//     ).unwrap();
-    
-//     let abs = root_path.canonicalize().unwrap();
 fn main() {
+
     let args: Vec<String> = env::args().collect();
 
+
+    // -----------------------------
+    // help / version は最優先で処理
+    // -----------------------------
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "--help" | "-h" => {
+                print_help();
+                return;
+            }
+            "--version" | "-v" => {
+                print_version();
+                return;
+            }
+            _ => {}
+        }
+    }
     // -----------------------------
     // 1. デフォルト値
     // -----------------------------
